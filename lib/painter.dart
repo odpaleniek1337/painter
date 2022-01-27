@@ -4,6 +4,7 @@ library painter;
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui';
+import 'dart:math';
 
 import 'package:flutter/material.dart' hide Image;
 import 'package:flutter/widgets.dart' hide Image;
@@ -96,17 +97,39 @@ class _PainterPainter extends CustomPainter {
   }
 }
 
+class Coords {
+  final double _x;
+  final double _y;
+  final double _currentLength;
+
+  Coords(double x, double y, double currentLength)
+    : _x = x,
+      _y = y,
+      _currentLength = currentLength;
+
+  double get x => _x;
+  double get y => _y;
+  double get currentLength => _currentLength;
+}
+
 class _PathHistory {
   List<MapEntry<Path, Paint>> _paths;
   Paint currentPaint;
   Paint _backgroundPaint;
   bool _inDrag;
+  List<MapEntry<int, Coords>> _coords;
+  int _currentCoordPath;
 
   bool get isEmpty => _paths.isEmpty || (_paths.length == 1 && _inDrag);
+
+  List<MapEntry<Path, Paint>> get paths => _paths;
+  List<MapEntry<int, Coords>> get coords => _coords;
 
   _PathHistory()
       : _paths = <MapEntry<Path, Paint>>[],
         _inDrag = false,
+        _currentCoordPath = 0,
+        _coords = <MapEntry<int, Coords>>[],
         _backgroundPaint = new Paint()..blendMode = BlendMode.dstOver,
         currentPaint = new Paint()
           ..color = Colors.black
@@ -135,6 +158,7 @@ class _PathHistory {
       Path path = new Path();
       path.moveTo(startPoint.dx, startPoint.dy);
       _paths.add(new MapEntry<Path, Paint>(path, currentPaint));
+      _coords.add(new MapEntry<int, Coords>(_currentCoordPath, new Coords(num.parse(startPoint.dx.toStringAsFixed(5)).toDouble(), num.parse(startPoint.dy.toStringAsFixed(5)).toDouble(), 0)));
     }
   }
 
@@ -142,11 +166,22 @@ class _PathHistory {
     if (_inDrag) {
       Path path = _paths.last.key;
       path.lineTo(nextPoint.dx, nextPoint.dy);
+      if (_isLengthSuitable(nextPoint.dx, nextPoint.dy)) {
+        _coords.add(new MapEntry<int, Coords>(_currentCoordPath, new Coords(num.parse(nextPoint.dx.toStringAsFixed(5)).toDouble(), num.parse(nextPoint.dy.toStringAsFixed(5)).toDouble(), path.computeMetrics().toList()[0].length)));
+      }
     }
+  }
+
+  bool _isLengthSuitable(double x, double y) {
+    if (sqrt(pow((x - _coords.last.value.x), 2) + pow((y - _coords.last.value.y), 2))<= 5) {
+      return false;
+    }
+    else return true;
   }
 
   void endCurrent() {
     _inDrag = false;
+    _currentCoordPath += 1;
   }
 
   void draw(Canvas canvas, Size size) {
@@ -206,6 +241,8 @@ class PainterController extends ChangeNotifier {
 
   /// Creates a new instance for the use in a [Painter] widget.
   PainterController() : _pathHistory = new _PathHistory();
+
+  _PathHistory get pathHistory => _pathHistory;
 
   /// Returns true if nothing has been drawn yet.
   bool get isEmpty => _pathHistory.isEmpty;
